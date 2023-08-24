@@ -1,16 +1,23 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:usb_serial_for_android/transaction.dart';
 import 'package:usb_serial_for_android/usb_device.dart';
 import 'package:usb_serial_for_android/usb_event.dart';
 import 'package:usb_serial_for_android/usb_port.dart';
 import 'package:usb_serial_for_android/usb_serial_for_android.dart';
 
-void main() => runApp(MyApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await SystemChrome.setPreferredOrientations(<DeviceOrientation>[DeviceOrientation.portraitUp]);
+  runApp(const MyApp());
+}
 
 class MyApp extends StatefulWidget {
+  const MyApp({super.key});
+
   @override
   _MyAppState createState() => _MyAppState();
 }
@@ -19,13 +26,13 @@ class _MyAppState extends State<MyApp> {
   UsbPort? _port;
   String _status = "Idle";
   List<Widget> _ports = [];
-  List<Widget> _serialData = [];
+  final List<Widget> _serialData = [];
 
   StreamSubscription<String>? _subscription;
   Transaction<String>? _transaction;
   UsbDevice? _device;
 
-  TextEditingController _textController = TextEditingController();
+  final TextEditingController _textController = TextEditingController();
 
   Future<bool> _connectTo(UsbDevice? device) async {
     _serialData.clear();
@@ -55,7 +62,7 @@ class _MyAppState extends State<MyApp> {
 
     //_port = await device.create();
     // You can customize your driver and the port number
-    _port = await device.create(UsbSerial.CP21xx, 4);
+    _port = await device.create();
     if (await (_port!.open()) != true) {
       setState(() {
         _status = "Failed to open port";
@@ -64,10 +71,10 @@ class _MyAppState extends State<MyApp> {
     }
     _device = device;
 
-    await _port!.setDTR(true);
-    await _port!.setRTS(true);
-    await _port!.setPortParameters(
-        115200, UsbPort.DATABITS_8, UsbPort.STOPBITS_1, UsbPort.PARITY_NONE);
+    await _port!.setDTR(false);
+    await _port!.setRTS(false);
+    await _port!
+        .setPortParameters(115200, UsbPort.DATABITS_8, UsbPort.STOPBITS_1, UsbPort.PARITY_NONE);
 
     await _port!.connect();
 
@@ -97,9 +104,9 @@ class _MyAppState extends State<MyApp> {
     }
     print(devices);
 
-    devices.forEach((device) {
+    for (var device in devices) {
       _ports.add(ListTile(
-          leading: Icon(Icons.usb),
+          leading: const Icon(Icons.usb),
           title: Text(device.productName!),
           subtitle: Text(device.manufacturerName!),
           trailing: ElevatedButton(
@@ -110,7 +117,7 @@ class _MyAppState extends State<MyApp> {
               });
             },
           )));
-    });
+    }
 
     setState(() {
       print(_ports);
@@ -143,10 +150,7 @@ class _MyAppState extends State<MyApp> {
       ),
       body: Center(
           child: Column(children: <Widget>[
-        Text(
-            _ports.length > 0
-                ? "Available Serial Ports"
-                : "No serial devices available",
+        Text(_ports.isNotEmpty ? "Available Serial Ports" : "No serial devices available",
             style: Theme.of(context).textTheme.headline6),
         ..._ports,
         Text('Status: $_status\n'),
@@ -154,23 +158,23 @@ class _MyAppState extends State<MyApp> {
         ListTile(
           title: TextField(
             controller: _textController,
-            decoration: InputDecoration(
+            decoration: const InputDecoration(
               border: OutlineInputBorder(),
               labelText: 'Text To Send',
             ),
           ),
           trailing: ElevatedButton(
-            child: Text("Send"),
             onPressed: _port == null
                 ? null
                 : () async {
                     if (_port == null) {
                       return;
                     }
-                    String data = _textController.text + "\r\n";
+                    String data = "${_textController.text}\r\n";
                     await _port!.write(Uint8List.fromList(data.codeUnits));
                     _textController.text = "";
                   },
+            child: const Text("Send"),
           ),
         ),
         Text("Result Data", style: Theme.of(context).textTheme.headline6),

@@ -10,7 +10,6 @@ import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbManager
 import android.os.Build
 import android.util.Log
-import androidx.annotation.NonNull
 import com.hoho.android.usbserial.driver.*
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.BinaryMessenger
@@ -39,7 +38,7 @@ class UsbSerialForAndroidPlugin : FlutterPlugin, MethodCallHandler, EventChannel
                 Log.d(TAG, "ACTION_USB_ATTACHED")
                 if (_eventSink != null) {
                     val device = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE) as UsbDevice?
-                    val msg: HashMap<String, Any?> = _serializeDevice(device!!)
+                    val msg: HashMap<String, Any?> = serializeDevice(device!!)
                     msg["event"] = ACTION_USB_ATTACHED
                     _eventSink!!.success(msg)
                 }
@@ -47,7 +46,7 @@ class UsbSerialForAndroidPlugin : FlutterPlugin, MethodCallHandler, EventChannel
                 Log.d(TAG, "ACTION_USB_DETACHED")
                 if (_eventSink != null) {
                     val device = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE) as UsbDevice?
-                    val msg: HashMap<String, Any?> = _serializeDevice(device!!)
+                    val msg: HashMap<String, Any?> = serializeDevice(device!!)
                     msg["event"] = ACTION_USB_DETACHED
                     _eventSink!!.success(msg)
                 }
@@ -90,9 +89,15 @@ class UsbSerialForAndroidPlugin : FlutterPlugin, MethodCallHandler, EventChannel
 
         }
 
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            PendingIntent.FLAG_MUTABLE
+        } else {
+            0
+        }
+
         val cw = _context
         val usbReceiver = BCR2(device, cb)
-        val permissionIntent = PendingIntent.getBroadcast(cw, 0, Intent(ACTION_USB_PERMISSION), 0)
+        val permissionIntent = PendingIntent.getBroadcast(cw, 0, Intent(ACTION_USB_PERMISSION), flags)
         val filter = IntentFilter(ACTION_USB_PERMISSION)
         cw?.registerReceiver(usbReceiver, filter)
         _usbManager?.requestPermission(device, permissionIntent)
@@ -123,10 +128,8 @@ class UsbSerialForAndroidPlugin : FlutterPlugin, MethodCallHandler, EventChannel
                 return
             }
 
-            var usbSerialDriver: UsbSerialDriver? = null
-
             Log.i(TAG, "type =>  $type")
-            usbSerialDriver = when (type) {
+            val usbSerialDriver: UsbSerialDriver? = when (type) {
                 null -> UsbSerialProber.getDefaultProber().probeDevice(device)
                 "ch34x" -> Ch34xSerialDriver(device)
                 "cp21xx" -> Cp21xxSerialDriver(device)
@@ -182,7 +185,7 @@ class UsbSerialForAndroidPlugin : FlutterPlugin, MethodCallHandler, EventChannel
         }
     }
 
-    private fun _serializeDevice(device: UsbDevice): HashMap<String, Any?> {
+    private fun serializeDevice(device: UsbDevice): HashMap<String, Any?> {
         val dev: HashMap<String, Any?> = HashMap()
         dev["deviceName"] = device.deviceName
         dev["vid"] = device.vendorId
@@ -208,15 +211,15 @@ class UsbSerialForAndroidPlugin : FlutterPlugin, MethodCallHandler, EventChannel
         }
         val transferDevices: MutableList<HashMap<String, Any?>> = ArrayList()
         for (device: UsbDevice in devices.values) {
-            transferDevices.add(_serializeDevice(device))
+            transferDevices.add(serializeDevice(device))
         }
         result.success(transferDevices)
     }
 
-    fun register(messenger: BinaryMessenger, context: Context) {
+    private fun register(messenger: BinaryMessenger, context: Context) {
         _binaryMessenger = messenger
         _context = context
-        _usbManager = _context?.getSystemService(android.content.Context.USB_SERVICE) as UsbManager
+        _usbManager = _context?.getSystemService(Context.USB_SERVICE) as UsbManager
         _eventChannel = EventChannel(messenger, "usb_serial_for_android/usb_events")
         _eventChannel?.setStreamHandler(this)
 
@@ -226,7 +229,7 @@ class UsbSerialForAndroidPlugin : FlutterPlugin, MethodCallHandler, EventChannel
         context.registerReceiver(_usbReceiver, filter)
     }
 
-    fun unregister() {
+    private fun unregister() {
         _context?.unregisterReceiver(_usbReceiver)
         _eventChannel = null
         _usbManager = null
@@ -234,7 +237,7 @@ class UsbSerialForAndroidPlugin : FlutterPlugin, MethodCallHandler, EventChannel
         _binaryMessenger = null
     }
 
-    private fun _createTyped(
+    private fun createTyped(
         type: String?,
         vid: Int,
         pid: Int,
@@ -267,7 +270,7 @@ class UsbSerialForAndroidPlugin : FlutterPlugin, MethodCallHandler, EventChannel
                 listDevices(result)
             }
             "create" -> {
-                _createTyped(
+                createTyped(
                     call.argument<String>("type"),
                     call.argument<Int>("vid")!!,
                     call.argument<Int>("pid")!!,
@@ -280,7 +283,7 @@ class UsbSerialForAndroidPlugin : FlutterPlugin, MethodCallHandler, EventChannel
         }
     }
 
-    override fun onDetachedFromEngine(@NonNull binding: FlutterPlugin.FlutterPluginBinding) {
+    override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         _methodChannel.setMethodCallHandler(null)
         unregister()
     }
